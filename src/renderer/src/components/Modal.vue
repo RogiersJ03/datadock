@@ -7,12 +7,18 @@ const modalStack: symbol[] = []
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount } from 'vue'
 import Icon from './Icon.vue'
-defineProps<{ title: string; wide?: boolean }>()
+const props = defineProps<{ title: string; wide?: boolean; busy?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
+
+// While an operation is running, ignore backdrop clicks, the ✕ and Escape so a
+// stray input can't abandon it. The footer's own buttons control closing instead.
+function requestClose(): void {
+  if (!props.busy) emit('close')
+}
 
 const modalId = Symbol('modal')
 function onKey(e: KeyboardEvent): void {
-  if (e.key === 'Escape' && modalStack[modalStack.length - 1] === modalId) emit('close')
+  if (e.key === 'Escape' && modalStack[modalStack.length - 1] === modalId) requestClose()
 }
 onMounted(() => {
   modalStack.push(modalId)
@@ -27,11 +33,11 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <Transition name="modal" appear>
-      <div class="overlay" @mousedown.self="emit('close')">
+      <div class="overlay" @mousedown.self="requestClose">
         <div class="modal" :class="{ wide }">
           <header class="modal-head">
             <h2>{{ title }}</h2>
-            <button class="btn-ghost close" title="Close" @click="emit('close')">
+            <button class="btn-ghost close" title="Close" :disabled="busy" @click="requestClose">
               <Icon name="x" :size="14" />
             </button>
           </header>
@@ -97,6 +103,10 @@ onBeforeUnmount(() => {
 .close:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+.close:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 .modal-body {
   padding: 18px;

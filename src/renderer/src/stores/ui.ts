@@ -33,6 +33,7 @@ export const useUi = defineStore('ui', () => {
   // Menu-triggered modals (rendered by MainPanel).
   const importOpen = ref(false)
   const exportDbOpen = ref(false)
+  const transferOpen = ref(false)
   const tableSizesOpen = ref(false)
   const columnSearchOpen = ref(false)
   const snapshotsOpen = ref(false)
@@ -108,6 +109,7 @@ export const useUi = defineStore('ui', () => {
     setDetailWidth,
     importOpen,
     exportDbOpen,
+    transferOpen,
     tableSizesOpen,
     columnSearchOpen,
     snapshotsOpen,

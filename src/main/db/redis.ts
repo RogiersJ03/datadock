@@ -78,6 +78,10 @@ export class RedisAdapter implements DbAdapter {
     this.client = undefined
   }
 
+  async ping(): Promise<void> {
+    await this.db.ping()
+  }
+
   async replicationStatus(): Promise<ReplicationStatus> {
     try {
       const raw = await this.db.info('replication')

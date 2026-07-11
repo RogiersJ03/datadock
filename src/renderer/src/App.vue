@@ -14,6 +14,7 @@ import CommandPalette from './components/CommandPalette.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import UpdateNotice from './components/UpdateNotice.vue'
+import TaskTray from './components/TaskTray.vue'
 import { useUpdates } from './stores/updates'
 import type { ConnectionConfig, Environment, Project, Topology } from '@shared/types'
 
@@ -327,6 +328,7 @@ function onDuplicateConnection(c: ConnectionConfig): void {
     <SettingsModal v-if="ui.settingsOpen" @close="ui.settingsOpen = false" />
     <ConfirmModal />
     <UpdateNotice />
+    <TaskTray />
   </div>
 </template>
 

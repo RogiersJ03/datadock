@@ -158,6 +158,13 @@ const allItems = computed<PaletteItem[]>(() => {
       }
     },
     {
+      label: 'Clone Database to…',
+      icon: '⇉',
+      handler: () => {
+        if (connId) ui.transferOpen = true
+      }
+    },
+    {
       label: 'Clone to SQLite',
       icon: 'copy',
       handler: () => {
