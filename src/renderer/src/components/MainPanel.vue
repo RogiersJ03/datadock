@@ -438,7 +438,7 @@ function onRowContext(tab: Tab, rowIndex: number, e: MouseEvent, colIndex?: numb
       const tableName = tab.table.name
       items.push(
         {
-          label: '🔎 Explore record',
+          label: 'Explore record',
           action: () =>
             tabsStore.openExplorer(tab.connectionId, {
               table: tableName,
@@ -448,7 +448,7 @@ function onRowContext(tab: Tab, rowIndex: number, e: MouseEvent, colIndex?: numb
             })
         },
         {
-          label: '🌐 Related records',
+          label: 'Related records',
           action: () =>
             tabsStore.openRelated(tab.connectionId, {
               table: tableName,
@@ -457,7 +457,7 @@ function onRowContext(tab: Tab, rowIndex: number, e: MouseEvent, colIndex?: numb
               label: `${tableName} #${String(value)}`
             })
         },
-        { label: '🕘 Row history…', action: () => openRowHistory(tab, rowIndex) },
+        { label: 'Row history…', action: () => openRowHistory(tab, rowIndex) },
         { sep: true }
       )
     }
@@ -1027,10 +1027,14 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
     </div>
 
     <template v-else>
-      <div v-if="isProduction" class="prod-banner">
-        ⚠ PRODUCTION — {{ activeConn.name }}. Changes here affect live data.
-      </div>
-      <div v-if="ws.error" class="conn-error">{{ ws.error }}</div>
+      <Transition name="drop">
+        <div v-if="isProduction" class="prod-banner">
+          ⚠ PRODUCTION — {{ activeConn.name }}. Changes here affect live data.
+        </div>
+      </Transition>
+      <Transition name="drop">
+        <div v-if="ws.error" class="conn-error">{{ ws.error }}</div>
+      </Transition>
 
       <div class="work">
         <!-- Table list -->
@@ -1071,7 +1075,7 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
 
         <!-- Tabs + content -->
         <div class="tab-area">
-          <div class="tab-strip">
+          <TransitionGroup name="tabs" tag="div" class="tab-strip">
             <div
               v-for="tab in connTabs"
               :key="tab.id"
@@ -1084,8 +1088,8 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
               <span v-if="tab.kind === 'table' && tabsStore.dirtyCount(tab)" class="tab-dirty">●</span>
               <button class="tab-close" @click.stop="tabsStore.closeTab(tab.id)"><Icon name="x" :size="12" /></button>
             </div>
-            <button class="tab-add" @click="newQuery" title="New query"><Icon name="plus" :size="15" /></button>
-          </div>
+            <button key="__add" class="tab-add" @click="newQuery" title="New query"><Icon name="plus" :size="15" /></button>
+          </TransitionGroup>
 
           <div v-if="!active" class="no-tab">
             <p>No tab open. Click a table or start a query.</p>
@@ -1447,12 +1451,12 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
               >
                 <div class="snippet-head">
                   <span class="snippet-name">{{ s.name }}</span>
-                  <button class="btn-ghost drop" @click.stop="tabsStore.deleteSnippet(active!, s.id)">✕</button>
+                  <button class="btn-ghost drop" @click.stop="tabsStore.deleteSnippet(active!, s.id)"><Icon name="x" :size="12" /></button>
                 </div>
                 <pre class="history-sql">{{ s.sql }}</pre>
               </div>
               <div v-if="!active.snippets || active.snippets.length === 0" class="no-tables">
-                No saved queries yet. Write a query and press ☆ Save.
+                No saved queries yet. Write a query and press Save.
               </div>
             </div>
           </div>
@@ -2066,6 +2070,16 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
   font-size: 12px;
   font-family: var(--mono);
 }
+/* Banners (production warning, connection errors) slide down into place. */
+.drop-enter-active,
+.drop-leave-active {
+  transition: opacity var(--dur-2) ease, transform var(--dur-2) var(--ease-out);
+}
+.drop-enter-from,
+.drop-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
 .work {
   flex: 1;
   display: flex;
@@ -2186,6 +2200,7 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
   padding: 5px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  transition: background var(--dur-1);
 }
 .table-item:hover {
   background: var(--bg-hover);
@@ -2246,6 +2261,21 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
   background: var(--bg-app);
+}
+/* Keep the strip's own scrollbar slim so it doesn't crowd the tabs. */
+.tab-strip::-webkit-scrollbar {
+  height: 4px;
+}
+/* New tabs rise in; when one closes, its neighbours slide over to fill the gap. */
+.tabs-enter-active {
+  transition: opacity var(--dur-2) ease, transform var(--dur-2) var(--ease-out);
+}
+.tabs-enter-from {
+  opacity: 0;
+  transform: translateY(7px);
+}
+.tabs-move {
+  transition: transform var(--dur-2) var(--ease-out);
 }
 .tab {
   display: flex;
