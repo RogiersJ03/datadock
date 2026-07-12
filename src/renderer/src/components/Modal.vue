@@ -5,10 +5,19 @@ const modalStack: symbol[] = []
 </script>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
+import { onMounted, onBeforeUnmount, computed } from 'vue'
 import Icon from './Icon.vue'
-const props = defineProps<{ title: string; wide?: boolean; busy?: boolean }>()
+const props = defineProps<{
+  title: string
+  /** Legacy shorthand for size="wide". */
+  wide?: boolean
+  /** Width tier — all are responsive (capped to the viewport). */
+  size?: 'md' | 'wide' | 'lg' | 'xl' | 'full'
+  busy?: boolean
+}>()
 const emit = defineEmits<{ close: [] }>()
+
+const sizeClass = computed(() => props.size ?? (props.wide ? 'wide' : 'md'))
 
 // While an operation is running, ignore backdrop clicks, the ✕ and Escape so a
 // stray input can't abandon it. The footer's own buttons control closing instead.
@@ -34,7 +43,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <Transition name="modal" appear>
       <div class="overlay" @mousedown.self="requestClose">
-        <div class="modal" :class="{ wide }">
+        <div class="modal" :class="`size-${sizeClass}`">
           <header class="modal-head">
             <h2>{{ title }}</h2>
             <button class="btn-ghost close" title="Close" :disabled="busy" @click="requestClose">
@@ -65,9 +74,7 @@ onBeforeUnmount(() => {
   z-index: 100;
 }
 .modal {
-  width: 440px;
-  max-width: 92vw;
-  max-height: 88vh;
+  max-height: 90vh;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -76,8 +83,23 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
 }
-.modal.wide {
-  width: 560px;
+/* Responsive width tiers — each caps to the viewport so the modal never
+   overflows the window, and grows to a comfortable width on larger screens. */
+.modal.size-md {
+  width: min(460px, 94vw);
+}
+.modal.size-wide {
+  width: min(720px, 94vw);
+}
+.modal.size-lg {
+  width: min(920px, 94vw);
+}
+.modal.size-xl {
+  width: min(1140px, 95vw);
+}
+.modal.size-full {
+  width: 95vw;
+  height: 90vh;
 }
 .modal-head {
   display: flex;
@@ -110,7 +132,10 @@ onBeforeUnmount(() => {
 }
 .modal-body {
   padding: 18px;
-  overflow-y: auto;
+  overflow: auto;
+  /* Contain oversized content within the body (its own scrollbar) instead of
+     letting it push the modal wider than the viewport. */
+  min-width: 0;
 }
 .modal-foot {
   display: flex;

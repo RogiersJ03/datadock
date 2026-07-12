@@ -284,6 +284,7 @@ export function registerIpc(): void {
   handle('io:importCsv', (id: string, table: TableInfo) => io.importCsv(id, table))
   handle('io:exportConnections', () => io.exportConnections())
   handle('io:importConnections', () => io.importConnections())
+  handle('io:saveFiles', (files: { filename: string; content: string }[]) => io.saveFiles(files))
   handle('io:saveFile', (name: string, data: string, binary: boolean) =>
     io.saveFile(name, data, binary)
   )

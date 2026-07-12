@@ -201,6 +201,8 @@ const api = {
       invoke<{ canceled?: boolean; workspace?: Workspace }>('io:importConnections'),
     saveFile: (name: string, data: string, binary: boolean) =>
       invoke<FileResult>('io:saveFile', name, data, binary),
+    saveFiles: (files: { filename: string; content: string }[]) =>
+      invoke<FileResult & { count?: number }>('io:saveFiles', files),
     exportPdf: (name: string, html: string, landscape?: boolean) =>
       invoke<FileResult>('io:exportPdf', name, html, landscape),
     pickFolder: () => invoke<FileResult>('io:pickFolder')

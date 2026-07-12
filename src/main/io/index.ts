@@ -498,6 +498,29 @@ export async function saveFile(defaultName: string, data: string, binary: boolea
 }
 
 /**
+ * Prompt for a directory, then write several text files into it. Used by code
+ * generation to drop a whole database's worth of models/migrations at once.
+ * Filenames are sanitized to their basename so a generator can't escape the dir.
+ */
+export async function saveFiles(
+  files: { filename: string; content: string }[]
+): Promise<FileResult & { count?: number }> {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Choose a folder to save the generated files'
+  })
+  const dir = filePaths?.[0]
+  if (canceled || !dir) return { canceled: true }
+  let count = 0
+  for (const f of files) {
+    const name = basename(f.filename) || `file_${count}.txt`
+    await writeFile(join(dir, name), f.content)
+    count++
+  }
+  return { canceled: false, path: dir, count }
+}
+
+/**
  * Render a self-contained HTML document (the renderer composes it with chart
  * images already embedded as data-URLs) to a PDF in an offscreen window. Used
  * for dashboard/report export. No external print dependency required.

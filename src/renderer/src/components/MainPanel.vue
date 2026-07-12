@@ -38,6 +38,8 @@ import RedisQueuePanel from './RedisQueuePanel.vue'
 import RedisKeyModal from './RedisKeyModal.vue'
 import VisualQueryBuilder from './VisualQueryBuilder.vue'
 import DataGeneratorModal from './DataGeneratorModal.vue'
+import CodegenModal from './CodegenModal.vue'
+import { LANGUAGES as CODEGEN_LANGUAGES } from '../lib/codegen'
 import AiAssistantModal from './AiAssistantModal.vue'
 import QueryVarsModal from './QueryVarsModal.vue'
 import PlanTreeModal from './PlanTreeModal.vue'
@@ -53,7 +55,14 @@ import TableNoteModal from './TableNoteModal.vue'
 import BookmarksMenu from './BookmarksMenu.vue'
 import type { ChartType, DropTableOptions, PlanBaseline, PlanNode, QueryResult, TruncateOptions } from '@shared/types'
 
-type MenuItem = { label?: string; danger?: boolean; sep?: boolean; shortcut?: string; action?: () => void }
+type MenuItem = {
+  label?: string
+  danger?: boolean
+  sep?: boolean
+  shortcut?: string
+  action?: () => void
+  children?: MenuItem[]
+}
 import { sqlDialect, type FilterOp, type FilterSpec, type Snippet, type TableInfo } from '@shared/types'
 import { formatSql } from '../lib/sql'
 import { lintSql } from '../lib/sqlLint'
@@ -88,6 +97,7 @@ const saveSnippetOpen = ref(false)
 const createTableOpen = ref(false)
 const exportTableTarget = ref<TableInfo | null>(null)
 const genTarget = ref<TableInfo | null>(null)
+const codegenTarget = ref<{ language: string; tables: TableInfo[] } | null>(null)
 const aiOpen = ref(false)
 const aiMode = ref<'generate' | 'explain' | 'fix'>('generate')
 
@@ -540,6 +550,19 @@ function onTableContext(t: TableInfo, idx: number, e: MouseEvent): void {
     { label: 'Export table…', action: () => (exportTableTarget.value = { schema: t.schema, name: t.name, type: t.type }) }
   ]
   if (!nonSql.value) {
+    items.push({
+      label: 'Generate code',
+      children: CODEGEN_LANGUAGES.map((lang) => ({
+        label: lang,
+        action: () => {
+          const sel = ws.tables.filter((x) => selectedTables.value.includes(tableKey(x)))
+          codegenTarget.value = {
+            language: lang,
+            tables: sel.length ? sel : [{ schema: t.schema, name: t.name, type: t.type }]
+          }
+        }
+      }))
+    })
     items.push({ label: 'Dependencies…', action: () => (depsTarget.value = t.name) })
   }
   if (!nonSql.value && !readOnly.value) {
@@ -562,6 +585,21 @@ function onTableContext(t: TableInfo, idx: number, e: MouseEvent): void {
     )
   }
   ctx.value = { x: e.clientX, y: e.clientY, items }
+}
+
+// Generate code for the entire database — a language menu that opens the modal
+// scoped to every table/view of the active connection.
+function openDbCodegen(e: MouseEvent): void {
+  const all = ws.tables.map((t) => ({ schema: t.schema, name: t.name, type: t.type }))
+  if (!all.length) return
+  ctx.value = {
+    x: e.clientX,
+    y: e.clientY,
+    items: CODEGEN_LANGUAGES.map((lang) => ({
+      label: lang,
+      action: () => (codegenTarget.value = { language: lang, tables: all })
+    }))
+  }
 }
 
 // ---- per-table notes (local) -----------------------------------------------
@@ -1023,6 +1061,7 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
         <button class="btn btn-ghost" title="Visual Query Builder" @click="tabsStore.openVisualQuery(activeConn.id)"><Icon name="diagram" /> Builder</button>
         <button class="btn btn-ghost" title="AI Investigation Suite — slow queries, database health & schema understanding" @click="tabsStore.openInvestigations(activeConn.id)"><Icon name="sparkles" /> Investigate</button>
         <button class="btn btn-ghost" title="Analytics — charts & dashboards (⌘⇧A)" @click="tabsStore.openAnalytics(activeConn.id)"><Icon name="chart" /> Analytics</button>
+        <button v-if="!nonSql" class="btn btn-ghost" title="Generate code for the whole database — models, migrations, DTOs, schemas…" :disabled="!ws.tables.length" @click="openDbCodegen($event)"><Icon name="code" /> Code</button>
         <button class="btn btn-ghost" @click="newQuery"><Icon name="plus" /> Query</button>
         <button class="btn" @click="disconnect">Disconnect</button>
       </template>
@@ -1056,6 +1095,7 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
             <input class="input filter" v-model="tableFilter" placeholder="Filter tables…" />
             <button class="icon-btn sm" title="Refresh tables" :disabled="!activeConn || refreshingTables" @click="refreshTableList"><Icon name="refresh" :size="14" :class="{ spin: refreshingTables }" /></button>
             <button v-if="!nonSql && !readOnly" class="icon-btn sm" title="New table" @click="createTableOpen = true"><Icon name="plus" :size="14" /></button>
+            <button v-if="!nonSql" class="icon-btn sm" title="Generate code (whole database)" :disabled="!activeConn || !ws.tables.length" @click="openDbCodegen($event)"><Icon name="code" :size="14" /></button>
             <button class="icon-btn sm" title="Collapse list" @click="ui.toggleTables()"><Icon name="chevronLeft" :size="14" /></button>
           </div>
           <div class="table-list">
@@ -1679,6 +1719,14 @@ async function killProcess(tab: Tab, row: unknown[]): Promise<void> {
         :table="genTarget"
         @done="onGenerated"
         @close="genTarget = null"
+      />
+      <CodegenModal
+        v-if="codegenTarget"
+        :connection-id="activeConn.id"
+        :driver="activeConn.driver"
+        :language="codegenTarget.language"
+        :tables="codegenTarget.tables"
+        @close="codegenTarget = null"
       />
       <ContextMenu v-if="ctx" :x="ctx.x" :y="ctx.y" :items="ctx.items" @close="ctx = null" />
 
