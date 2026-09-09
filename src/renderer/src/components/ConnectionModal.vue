@@ -32,6 +32,7 @@ function blank(): ConnectionConfig {
     user: '',
     password: '',
     ssl: false,
+    mssqlAuthType: 'sql',
     readOnly: false,
     production: false,
     mcpExcluded: false,
@@ -52,6 +53,17 @@ const isNetwork = computed(() =>
 )
 const isRedis = computed(() => form.driver === 'redis')
 const isOracle = computed(() => form.driver === 'oracle')
+const isMssql = computed(() => form.driver === 'mssql')
+const isEntraAuth = computed(() => isMssql.value && form.mssqlAuthType === 'entra-interactive')
+
+// Azure SQL requires an encrypted connection — flip SSL on automatically the
+// moment Entra auth is chosen (the user can still turn it back off).
+watch(
+  () => form.mssqlAuthType,
+  (t) => {
+    if (t === 'entra-interactive') form.ssl = true
+  }
+)
 const canTunnel = computed(
   () => !!form.driver && !['sqlite', 'duckdb', 'mongodb', 'snowflake', 'bigquery'].includes(form.driver)
 )
@@ -102,7 +114,11 @@ const canSave = computed(() => {
 const PRESETS: { label: string; config: Partial<ConnectionConfig> }[] = [
   { label: 'PostgreSQL', config: { driver: 'postgres', host: 'localhost', port: 5432, user: 'postgres', database: 'postgres' } },
   { label: 'MySQL / MariaDB', config: { driver: 'mysql', host: 'localhost', port: 3306, user: 'root' } },
-  { label: 'SQL Server', config: { driver: 'mssql', host: 'localhost', port: 1433, user: 'sa' } },
+  { label: 'SQL Server', config: { driver: 'mssql', host: 'localhost', port: 1433, user: 'sa', mssqlAuthType: 'sql' } },
+  {
+    label: 'Azure SQL (Entra ID)',
+    config: { driver: 'mssql', host: '', port: 1433, ssl: true, mssqlAuthType: 'entra-interactive' }
+  },
   { label: 'Oracle', config: { driver: 'oracle', host: 'localhost', port: 1521, user: 'system', database: 'XEPDB1' } },
   { label: 'MongoDB', config: { driver: 'mongodb', url: 'mongodb://localhost:27017' } },
   { label: 'Redis', config: { driver: 'redis', host: 'localhost', port: 6379 } },
@@ -179,7 +195,11 @@ function save(): void {
       <template v-if="isNetwork">
         <div class="field span2-host">
           <label>Host</label>
-          <input class="input" v-model="form.host" placeholder="localhost" />
+          <input
+            class="input"
+            v-model="form.host"
+            :placeholder="isEntraAuth ? 'yourserver.database.windows.net' : 'localhost'"
+          />
         </div>
         <div class="field">
           <label>Port</label>
@@ -194,19 +214,41 @@ function save(): void {
             :placeholder="isRedis ? '0' : isOracle ? 'e.g. ORCLPDB1 / XEPDB1' : 'optional'"
           />
         </div>
-        <div class="field">
-          <label>{{ isRedis ? 'Username (ACL, optional)' : 'User' }}</label>
-          <input class="input" v-model="form.user" autocomplete="off" />
+        <div v-if="isMssql" class="field span2">
+          <label>Authentication</label>
+          <select class="select" v-model="form.mssqlAuthType">
+            <option value="sql">SQL login (username / password)</option>
+            <option value="entra-interactive">Microsoft Entra ID — sign in with browser</option>
+          </select>
         </div>
-        <div class="field">
-          <label>Password</label>
+        <template v-if="!isEntraAuth">
+          <div class="field">
+            <label>{{ isRedis ? 'Username (ACL, optional)' : 'User' }}</label>
+            <input class="input" v-model="form.user" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input
+              class="input"
+              type="password"
+              v-model="form.password"
+              autocomplete="new-password"
+              :placeholder="hadPassword ? '•••••• (unchanged)' : ''"
+            />
+          </div>
+        </template>
+        <div v-else class="field span2">
+          <label>Entra tenant ID (optional)</label>
           <input
             class="input"
-            type="password"
-            v-model="form.password"
-            autocomplete="new-password"
-            :placeholder="hadPassword ? '•••••• (unchanged)' : ''"
+            v-model="form.entraTenantId"
+            placeholder="e.g. contoso.onmicrosoft.com or a GUID — leave blank to pick at sign-in"
           />
+          <small class="hint">
+            Testing or connecting opens your system browser to sign in with Microsoft Entra ID
+            (MFA/conditional access supported). DataDock keeps you signed in for the rest of this
+            app session; you'll sign in again after restarting.
+          </small>
         </div>
         <label class="check span2">
           <input type="checkbox" v-model="form.ssl" />

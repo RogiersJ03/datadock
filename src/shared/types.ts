@@ -158,6 +158,13 @@ export interface ConnectionConfig {
   hasPassword?: boolean
   ssl?: boolean
 
+  // SQL Server — Microsoft Entra ID (Azure AD) login, as an alternative to the
+  // user/password above. Interactive sign-in opens the system browser (MSAL),
+  // so it supports MFA/conditional access on managed Azure SQL databases.
+  mssqlAuthType?: MssqlAuthType
+  /** Optional: pin interactive sign-in to a specific Entra tenant (GUID or domain). */
+  entraTenantId?: string
+
   // SQLite / DuckDB (and BigQuery service-account key file)
   filePath?: string
 
@@ -195,6 +202,8 @@ export interface ConnectionConfig {
 }
 
 export type SshAuthMethod = 'key' | 'password' | 'agent'
+
+export type MssqlAuthType = 'sql' | 'entra-interactive'
 
 /** A reusable SSH tunnel definition, managed in Settings and selected per
  * connection. Secrets (passphrase/password) are never sent to the renderer —

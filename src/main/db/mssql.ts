@@ -1,4 +1,5 @@
 import sql from 'mssql'
+import { InteractiveBrowserCredential } from '@azure/identity'
 import type {
   AlterOp,
   ConnectionConfig,
@@ -17,6 +18,25 @@ import { buildClauses, buildErModel, buildSnapshot, groupIndexes, indexName } fr
 import type { ErModel, SchemaSnapshot } from '@shared/types'
 
 const q = (ident: string): string => `[${ident.replace(/]/g, ']]')}]`
+
+// Interactive Entra ID credentials, cached by connection (+ tenant), so a pool
+// reconnect or a heal after a network blip can silently reuse MSAL's in-memory
+// token cache instead of popping the browser open again. The cache only lives
+// for the app session — signing in again after a restart is expected.
+const entraCredentials = new Map<string, InteractiveBrowserCredential>()
+
+function entraCredential(config: ConnectionConfig): InteractiveBrowserCredential {
+  const key = `${config.id}:${config.entraTenantId ?? ''}`
+  let cred = entraCredentials.get(key)
+  if (!cred) {
+    // No clientId: falls back to Azure's well-known "Microsoft Azure CLI"
+    // public client, which is pre-consented in virtually every tenant — no
+    // app registration needed for this to work out of the box.
+    cred = new InteractiveBrowserCredential({ tenantId: config.entraTenantId || undefined })
+    entraCredentials.set(key, cred)
+  }
+  return cred
+}
 
 export class MSSQLAdapter implements DbAdapter {
   private pool?: sql.ConnectionPool
@@ -45,12 +65,14 @@ export class MSSQLAdapter implements DbAdapter {
   constructor(public readonly config: ConnectionConfig) {}
 
   private poolConfig(): sql.config {
+    const useEntra = this.config.mssqlAuthType === 'entra-interactive'
     return {
       server: this.config.host ?? 'localhost',
       port: this.config.port ?? 1433,
       database: this.config.database || undefined,
-      user: this.config.user,
-      password: this.config.password,
+      ...(useEntra
+        ? { authentication: { type: 'token-credential', options: { credential: entraCredential(this.config) } } }
+        : { user: this.config.user, password: this.config.password }),
       options: {
         encrypt: !!this.config.ssl,
         trustServerCertificate: true
