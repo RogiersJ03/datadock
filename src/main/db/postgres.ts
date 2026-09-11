@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { entraPostgresAccessToken, entraPostgresRole, isPostgresEntra } from '../auth/entra'
+import { entraPostgresAccessToken, entraPostgresRole, isPostgresEntra, isPostgresPasswordAuthFailure, postgresEntraAuthRejectedError } from '../auth/entra'
 import type {
   AlterOp,
   ColumnMeta,
@@ -26,6 +26,8 @@ pg.types.setTypeParser(pg.types.builtins.NUMERIC, (v) => v)
 export class PostgresAdapter implements DbAdapter {
   private pool?: pg.Pool
   private txn?: pg.PoolClient
+  // Role actually sent to pg on Entra connect (UPN or override), for auth-error copy.
+  private resolvedUser?: string
   // Backend PIDs of in-flight queries, so cancelQuery can target them.
   private activePids = new Set<number>()
   constructor(public readonly config: ConnectionConfig) {}
@@ -54,6 +56,7 @@ export class PostgresAdapter implements DbAdapter {
       // Prefetch always — interactive MFA must not run under connectionTimeoutMillis.
       const first = await entraPostgresAccessToken(this.config)
       user = entraPostgresRole(this.config, first)
+      this.resolvedUser = user
       password = async () => entraPostgresAccessToken(this.config)
     }
     return {
@@ -72,13 +75,22 @@ export class PostgresAdapter implements DbAdapter {
     return new pg.Pool(await this.poolOptions())
   }
 
+  private rethrowEntraAuth(err: unknown): never {
+    if (isPostgresEntra(this.config) && isPostgresPasswordAuthFailure(err)) {
+      throw postgresEntraAuthRejectedError(this.resolvedUser ?? 'unknown', err)
+    }
+    throw err
+  }
+
   async test(): Promise<void> {
     const pool = await this.makePool()
     try {
       const client = await pool.connect()
       client.release()
+    } catch (err) {
+      this.rethrowEntraAuth(err)
     } finally {
-      await pool.end()
+      await pool.end().catch(() => undefined)
     }
   }
 
@@ -89,8 +101,14 @@ export class PostgresAdapter implements DbAdapter {
     // An idle client erroring (server restart, dropped tunnel) emits here; left
     // unhandled it would crash the process. Treat it as a lost connection.
     this.pool.on('error', (err) => this.onConnectionLost?.(err))
-    const client = await this.pool.connect()
-    client.release()
+    try {
+      const client = await this.pool.connect()
+      client.release()
+    } catch (err) {
+      await this.pool.end().catch(() => undefined)
+      this.pool = undefined
+      this.rethrowEntraAuth(err)
+    }
   }
 
   async ping(): Promise<void> {

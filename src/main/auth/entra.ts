@@ -74,3 +74,29 @@ function entraUpnFromAccessToken(accessToken: string): string | undefined {
   }
   return undefined
 }
+
+const ENTRA_PG_REJECTED_PREFIX = 'Microsoft Entra sign-in succeeded'
+
+function pgErrorCode(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err && typeof (err as { code?: unknown }).code === 'string') {
+    return (err as { code: string }).code
+  }
+  if (err instanceof Error && err.cause) return pgErrorCode(err.cause)
+  return ''
+}
+
+export function isPostgresPasswordAuthFailure(err: unknown): boolean {
+  if (err instanceof Error && err.message.startsWith(ENTRA_PG_REJECTED_PREFIX)) return false
+  const code = pgErrorCode(err)
+  const msg = err instanceof Error ? err.message : String(err)
+  return code === '28P01' || /password authentication failed/i.test(msg)
+}
+
+export function postgresEntraAuthRejectedError(role: string, cause: unknown): Error {
+  if (cause instanceof Error && cause.message.startsWith(ENTRA_PG_REJECTED_PREFIX)) return cause
+  return new Error(
+    `${ENTRA_PG_REJECTED_PREFIX}, but Azure PostgreSQL rejected the role "${role}". ` +
+      `Grant that user or group on the Flexible Server, or set the role override for a group login.`,
+    { cause: cause instanceof Error ? cause : undefined }
+  )
+}
