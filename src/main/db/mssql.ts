@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { entraCredential } from '../auth/entra'
+import { entraCredential, entraSqlAccessToken, isMssqlEntra } from '../auth/entra'
 import type {
   AlterOp,
   ConnectionConfig,
@@ -46,7 +46,7 @@ export class MSSQLAdapter implements DbAdapter {
   constructor(public readonly config: ConnectionConfig) {}
 
   private poolConfig(): sql.config {
-    const useEntra = this.config.mssqlAuthType === 'entra-interactive'
+    const useEntra = isMssqlEntra(this.config)
     return {
       server: this.config.host ?? 'localhost',
       port: this.config.port ?? 1433,
@@ -59,12 +59,15 @@ export class MSSQLAdapter implements DbAdapter {
         trustServerCertificate: true
       },
       pool: { max: 4, min: 0 },
-      connectionTimeout: 10_000,
+      // Entra: 120s backstop if tedious's FedAuth SPN is not database.windows.net
+      // (prefetch already completed interactive MFA). Password login stays at 10s.
+      connectionTimeout: useEntra ? 120_000 : 10_000,
       requestTimeout: 30_000
     }
   }
 
   async test(): Promise<void> {
+    if (isMssqlEntra(this.config)) await entraSqlAccessToken(this.config)
     const pool = new sql.ConnectionPool(this.poolConfig())
     try {
       await pool.connect()
@@ -76,6 +79,7 @@ export class MSSQLAdapter implements DbAdapter {
   onConnectionLost?: (err: Error) => void
 
   async connect(): Promise<void> {
+    if (isMssqlEntra(this.config)) await entraSqlAccessToken(this.config)
     this.pool = await new sql.ConnectionPool(this.poolConfig()).connect()
     this.pool.on('error', (err: Error) => this.onConnectionLost?.(err))
   }

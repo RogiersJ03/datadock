@@ -20,6 +20,9 @@ export function entraCredential(config: ConnectionConfig): InteractiveBrowserCre
   return cred
 }
 
+/** Azure SQL / Azure SQL Managed Instance token audience (typical tedious FedAuth SPN). */
+export const AZURE_SQL_ENTRA_SCOPE = 'https://database.windows.net/.default'
+
 /** Azure Database for PostgreSQL (Flexible Server) token audience. */
 export const AZURE_PG_ENTRA_SCOPE = 'https://ossrdbms-aad.database.windows.net/.default'
 
@@ -29,6 +32,18 @@ export function isPostgresEntra(config: ConnectionConfig): boolean {
 
 export function isMssqlEntra(config: ConnectionConfig): boolean {
   return config.driver === 'mssql' && config.mssqlAuthType === 'entra-interactive'
+}
+
+/**
+ * Warm MSAL's cache for Azure SQL so tedious's later getToken() during FedAuth
+ * is a silent cache hit. Interactive MFA must not run under connectionTimeout.
+ * Never include the token in thrown errors — it is a bearer credential.
+ */
+export async function entraSqlAccessToken(config: ConnectionConfig): Promise<void> {
+  const token = await entraCredential(config).getToken(AZURE_SQL_ENTRA_SCOPE)
+  if (!token?.token) {
+    throw new Error('Microsoft Entra ID did not return an access token for Azure SQL.')
+  }
 }
 
 /**
